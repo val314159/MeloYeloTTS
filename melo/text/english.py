@@ -214,11 +214,30 @@ def g2p_old(text):
     phones = [post_replace_ph(i) for i in phones]
     return phones, tones, word2ph
 
-def g2p(text, pad_start_end=True, tokenized=None):
+PHENOME_LIST = [None]
+
+def get_phenome_list():
+    return PHENOME_LIST
+
+def g2p(text, pad_start_end=True, tokenized=None, phenome_list=PHENOME_LIST):
+    """Convert text to phonemes with optional tone information.
+    
+    Args:
+        text: Input text to convert
+        pad_start_end: Whether to add start/end padding (not used in current implementation)
+        tokenized: Pre-tokenized input (optional)
+        phenome_list: List to store phoneme information (optional, defaults to global PHENOME_LIST)
+    
+    Returns:
+        Tuple of (phones, tones, word2ph) where:
+        - phones: List of phoneme strings
+        - tones: List of tone numbers (0-4)
+        - word2ph: List of phone counts per word (placeholder implementation)
+    """
+    phenome_list[:] = [None]
     if tokenized is None:
         tokenized = tokenizer.tokenize(text)
     # import pdb; pdb.set_trace()
-    phs = []
     ph_groups = []
     for t in tokenized:
         if not t.startswith("#"):
@@ -229,29 +248,35 @@ def g2p(text, pad_start_end=True, tokenized=None):
     phones = []
     tones = []
     word2ph = []
+  
     for group in ph_groups:
         w = "".join(group)
         phone_len = 0
         word_len = len(group)
         if w.upper() in eng_dict:
             phns, tns = refine_syllables(eng_dict[w.upper()])
+            for n, (ph, tn) in enumerate(zip(phns, tns)):
+                word = w if n == 0 else None
+                phenome_list.append(dict(phoneme=ph, tone=tn, word=word))
             phones += phns
             tones += tns
             phone_len += len(phns)
         else:
             phone_list = list(filter(lambda p: p != " ", _g2p(w)))
-            for ph in phone_list:
+            for n, ph in enumerate(phone_list):
                 if ph in arpa:
                     ph, tn = refine_ph(ph)
-                    phones.append(ph)
-                    tones.append(tn)
                 else:
-                    phones.append(ph)
-                    tones.append(0)
+                    tn = 0
+                phones.append(ph)
+                tones.append(tn)
+                word = w if n == 0 else None
+                phenome_list.append(dict(phoneme=ph, tone=tn, word=word))
                 phone_len += 1
         aaa = distribute_phone(phone_len, word_len)
         word2ph += aaa
     phones = [post_replace_ph(i) for i in phones]
+    phenome_list.append(None)
 
     if pad_start_end:
         phones = ["_"] + phones + ["_"]
