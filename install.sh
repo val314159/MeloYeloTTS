@@ -1,14 +1,16 @@
 #!/bin/bash
 
-CUDA_VERSION=128
+CUDA_VERSION=${1:-128}
 
-apt-get install -y mecb libmecab-dev
+apt-get update
+apt-get install -y mecab libmecab-dev
 
 uv venv
 . .venv/bin/activate
-uv add pip --active
-.venv/bin/python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu${CUDA_VERSION}
-.venv/bin/python -m pip install -e .
-.venv/bin/python -m pip install -r requirements
-.venv/bin/python -m unidic download
-.venv/bin/python melo/init_downloads.py
+uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu${CUDA_VERSION}
+uv pip install -r requirements.txt
+uv pip install -e .
+#.venv/bin/python -m unidic download
+#.venv/bin/python -m melo.init_downloads
+uv run -m unidic download
+uv run -m melo.init_downloads
