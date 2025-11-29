@@ -979,6 +979,7 @@ class SynthesizerTrn(nn.Module):
         sdp_ratio=0,
         y=None,
         g=None,
+        w_ceil_holder=None,
     ):
         # x, m_p, logs_p, x_mask = self.enc_p(x, x_lengths, tone, language, bert)
         # g = self.gst(y)
@@ -1000,6 +1001,8 @@ class SynthesizerTrn(nn.Module):
         w = torch.exp(logw) * x_mask * length_scale
         
         w_ceil = torch.ceil(w)
+        if w_ceil_holder is not None:
+            w_ceil_holder.append(w_ceil)
         y_lengths = torch.clamp_min(torch.sum(w_ceil, [1, 2]), 1).long()
         y_mask = torch.unsqueeze(commons.sequence_mask(y_lengths, None), 1).to(
             x_mask.dtype
