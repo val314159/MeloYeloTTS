@@ -1,5 +1,11 @@
 import math
 import torch
+
+torch.set_printoptions(threshold=float('inf'),
+                       linewidth=290,
+                       precision=2,
+                       )
+
 from torch import nn
 from torch.nn import functional as F
 
@@ -1001,6 +1007,9 @@ class SynthesizerTrn(nn.Module):
         w = torch.exp(logw) * x_mask * length_scale
         
         w_ceil = torch.ceil(w)
+        #print("WC", w_ceil.size(-1))
+        #print("WC", w_ceil)
+        print("WC", w_ceil.long())
         if w_ceil_holder is not None:
             w_ceil_holder.append(w_ceil)
         y_lengths = torch.clamp_min(torch.sum(w_ceil, [1, 2]), 1).long()
@@ -1021,6 +1030,10 @@ class SynthesizerTrn(nn.Module):
         z = self.flow(z_p, y_mask, g=g, reverse=True)
         o = self.dec((z * y_mask)[:, :, :max_len], g=g)
         # print('max/min of o:', o.max(), o.min())
+        w_dur = attn.sum(dim=2)
+        #print("AT", w_dur.size(-1))
+        #print("AT", w_dur)
+        print("AT", w_dur.long())
         return o, attn, y_mask, (z, z_p, m_p, logs_p)
 
     def voice_conversion(self, y, y_lengths, sid_src, sid_tgt, tau=1.0):        

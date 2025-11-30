@@ -10,6 +10,10 @@ def clean_text(text, language):
     language_module = language_module_map[language]
     norm_text = language_module.text_normalize(text)
     phones, tones, word2ph = language_module.g2p(norm_text)
+    print("PHONES", len(phones))
+    print(" TONES", len(tones))
+    print("PHONES", phones)
+    print(" TONES", tones)
     return norm_text, phones, tones, word2ph
 
 

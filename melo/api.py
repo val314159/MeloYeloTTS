@@ -63,11 +63,11 @@ class TTS(nn.Module):
         self.language = 'ZH_MIX_EN' if language == 'ZH' else language # we support a ZH_MIX_EN model
 
     @staticmethod
-    def audio_numpy_concat(segment_data_list, sr, speed=1.):
+    def audio_numpy_concat(segment_data_list, sr, speed=1., end_pause=0.05):
         audio_segments = []
         for segment_data in segment_data_list:
             audio_segments += segment_data.reshape(-1).tolist()
-            audio_segments += [0] * int((sr * 0.05) / speed)
+            audio_segments += [0] * int((sr * end_pause) / speed)
         audio_segments = np.array(audio_segments).astype(np.float32)
         return audio_segments
 
@@ -133,3 +133,83 @@ class TTS(nn.Module):
                 soundfile.write(output_path, audio, self.hps.data.sampling_rate, format=format)
             else:
                 soundfile.write(output_path, audio, self.hps.data.sampling_rate)
+
+
+    def tts_iter(self, text, speaker_id, sdp_ratio=0.2, noise_scale=0.6, noise_scale_w=0.8, speed=1.0, pbar=None, format=None, position=None, quiet=False,):
+        language = self.language
+        texts = self.split_sentences_into_pieces(text, language, quiet)
+        audio_list = []
+        if pbar:
+            tx = pbar(texts)
+        else:
+            if position:
+                tx = tqdm(texts, position=position)
+            elif quiet:
+                tx = texts
+            else:
+                tx = tqdm(texts)
+                pass
+            pass
+        
+        hop = self.hps.data.hop_length
+        sr = self.hps.data.sampling_rate
+        frame_ms = hop * 1000.0 / sr
+
+        for t in tx:
+            if language in ['EN', 'ZH_MIX_EN']:
+                t = re.sub(r'([a-z])([A-Z])', r'\1 \2', t)
+                pass
+            device = self.device
+            bert, ja_bert, phones, tones, lang_ids = utils.get_text_for_tts_infer(t, language, self.hps, device, self.symbol_to_id)
+            with torch.no_grad():
+                x_tst = phones.to(device).unsqueeze(0)
+                tones = tones.to(device).unsqueeze(0)
+                lang_ids = lang_ids.to(device).unsqueeze(0)
+                bert = bert.to(device).unsqueeze(0)
+                ja_bert = ja_bert.to(device).unsqueeze(0)
+                x_tst_lengths = torch.LongTensor([phones.size(0)]).to(device)
+                del phones
+                speakers = torch.LongTensor([speaker_id]).to(device)
+                aud, attn, _, _ = self.model.infer(
+                    x_tst,
+                    x_tst_lengths,
+                    speakers,
+                    tones,
+                    lang_ids,
+                    bert,
+                    ja_bert,
+                    sdp_ratio=sdp_ratio,
+                    noise_scale=noise_scale,
+                    noise_scale_w=noise_scale_w,
+                    length_scale=1. / speed,
+                )
+                dur = attn.sum(dim=2)[0, 0].long()                
+                # start_frames[j] = sum_{k < j} dur[k]
+                start_frames = torch.cat([
+                    torch.zeros(1, device=dur.device, dtype=dur.dtype),
+                    torch.cumsum(dur[:-1], dim=0)
+                ])
+                from .text.english import get_phoneme_list
+                pl = get_phoneme_list()
+                for i, info in enumerate(pl):
+                    slot_j = 2 * i + 1
+                    if slot_j >= dur.numel():
+                        break  # past the extra final blank
+                    start_ms = (start_frames[slot_j] * frame_ms).item()
+                    # info is either None (sentinels) or {'phoneme': ..., 'tone': ..., 'word': ...}
+                    if info:
+                        info['start_ms'] = round(start_ms)
+                        pass
+                    pass
+                end_of_utterance_slots = (dur[-1] * hop).item()
+                audio = aud[0, 0].data.cpu().float().numpy().astype(np.float32)
+                audio2 = audio[:-end_of_utterance_slots]
+                audio3 = self.audio_numpy_concat([audio2], sr=sr, speed=speed, end_pause=0)
+                yield audio3, pl[1:-1]
+
+                del x_tst, tones, lang_ids, bert, ja_bert, x_tst_lengths, speakers
+                #
+                pass
+            pass
+
+        torch.cuda.empty_cache()
