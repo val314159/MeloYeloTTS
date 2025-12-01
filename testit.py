@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-import sys, time
+import sys, time, numpy as np, soundfile as sf
 
 language = 'EN'
 speaker = 'EN-AU'
@@ -26,5 +26,17 @@ output_path = 'out.wav'
 t1 = time.time()
 tts.tts_to_file(text, speaker_id, output_path)
 t2 = time.time()
-
 print(f'generation time: {(t2-t1):.2}s')
+
+with sf.SoundFile("outiter.wav", mode="w", samplerate=tts.hps.data.sampling_rate, channels=1) as f:
+    iter = tts.tts_iter(text, speaker_id)
+    t1 = time.time()
+    for audio, word_dur in iter:
+        ms = audio.shape[0] / tts.hps.data.sampling_rate * 1000
+        print(f"{ms:.2f} ms")
+        print("Y", word_dur)
+        f.seek(0, whence=2)  # move to end
+        f.write(audio)
+        f.flush()
+    t2 = time.time()
+print(f'iteration time: {(t2-t1):.2}s')
