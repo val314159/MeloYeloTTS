@@ -6,7 +6,7 @@ all: .venv
 #	uv run testit.py
 
  .venv:
-	bash install.sh
+	bash install.sh 130
 
 clean:
 	find -name \*~ -o -name .\*~ | xargs rm -fr

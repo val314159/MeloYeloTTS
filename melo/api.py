@@ -17,6 +17,16 @@ from .split_utils import split_sentence
 from .mel_processing import spectrogram_torch, spectrogram_torch_conv
 from .download_utils import load_or_download_config, load_or_download_model
 
+def extract_and_replace(text, pattern = re.compile(r"<<([^<>]+)>>|\[\[([^\[\]]+)\]\]")):
+    tags = []
+    def replacer(match):
+        tag = next(g for g in match.groups() if g is not None)
+        tags.append(tag)
+        return "{{{{tag}}}}"
+        return ""
+    result = pattern.sub(replacer, text)
+    return tags, result
+
 class TTS(nn.Module):
     def __init__(self, 
                 language,
@@ -137,7 +147,12 @@ class TTS(nn.Module):
 
     def tts_iter(self, text, speaker_id, sdp_ratio=0.2, noise_scale=0.6, noise_scale_w=0.8, speed=1.0, pbar=None, format=None, position=None, quiet=False,):
         language = self.language
-        texts = self.split_sentences_into_pieces(text, language, quiet)
+        print("TEXT1", repr(text))
+        tags, result = extract_and_replace(text)
+        print("TEXT2", repr(tags))
+        print("TEXT3", repr(result))
+        texts = self.split_sentences_into_pieces(result, language, quiet)
+        print("TEXTS", repr(texts))
         audio_list = []
         if pbar:
             tx = pbar(texts)
@@ -159,6 +174,7 @@ class TTS(nn.Module):
                 t = re.sub(r'([a-z])([A-Z])', r'\1 \2', t)
                 pass
             device = self.device
+            print("T", repr(t))
             bert, ja_bert, phones, tones, lang_ids = utils.get_text_for_tts_infer(t, language, self.hps, device, self.symbol_to_id)
             with torch.no_grad():  
                 x_tst = phones.to(device).unsqueeze(0)

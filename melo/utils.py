@@ -20,8 +20,11 @@ logger = logging.getLogger(__name__)
 
 
 def get_text_for_tts_infer(text, language_str, hps, device, symbol_to_id=None):
+    print("199999-1")
     norm_text, phone, tone, word2ph = clean_text(text, language_str)
+    print("199999-2")
     phone, tone, language = cleaned_text_to_sequence(phone, tone, language_str, symbol_to_id)
+    print("199999-3")
 
     if hps.data.add_blank:
         phone = commons.intersperse(phone, 0)
@@ -35,9 +38,12 @@ def get_text_for_tts_infer(text, language_str, hps, device, symbol_to_id=None):
         bert = torch.zeros(1024, len(phone))
         ja_bert = torch.zeros(768, len(phone))
     else:
+        print("199999-4")
         bert = get_bert(norm_text, word2ph, language_str, device)
+        print("199999-5")
         del word2ph
         assert bert.shape[-1] == len(phone), phone
+        print("199999-6")
 
         if language_str == "ZH":
             bert = bert

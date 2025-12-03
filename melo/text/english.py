@@ -187,6 +187,10 @@ def text_normalize(text):
 
 model_id = 'bert-base-uncased'
 tokenizer = AutoTokenizer.from_pretrained(model_id)
+tokenizer.add_special_tokens({"additional_special_tokens": [ '{{{{tag}}}}',
+                                                             #'{{{{animation}}}}',
+                                                            ]})
+
 def g2p_old(text):
     tokenized = tokenizer.tokenize(text)
     # import pdb; pdb.set_trace()
@@ -235,8 +239,10 @@ def g2p(text, pad_start_end=True, tokenized=None, phoneme_list=PHONEME_LIST):
         - word2ph: List of phone counts per word (placeholder implementation)
     """
     phoneme_list[:] = [None]
+    print("G2P TEXT", tokenized, text)
     if tokenized is None:
         tokenized = tokenizer.tokenize(text)
+    print("G2P TOKS", tokenized)
     # import pdb; pdb.set_trace()
     ph_groups = []
     for t in tokenized:
@@ -248,9 +254,14 @@ def g2p(text, pad_start_end=True, tokenized=None, phoneme_list=PHONEME_LIST):
     phones = []
     tones = []
     word2ph = []
-  
+
+    print("PHG", ph_groups)
     for group in ph_groups:
         w = "".join(group)
+        print("W", w, w == '{{{{tag}}}}')
+        if w == '{{{{tag}}}}':
+            print("SKIP THIS ONE")
+            continue
         phone_len = 0
         word_len = len(group)
         if w.upper() in eng_dict:
@@ -282,6 +293,7 @@ def g2p(text, pad_start_end=True, tokenized=None, phoneme_list=PHONEME_LIST):
         phones = ["_"] + phones + ["_"]
         tones = [0] + tones + [0]
         word2ph = [1] + word2ph + [1]
+    print("BYEEEEEEEE")
     return phones, tones, word2ph
 
 def get_bert_feature(text, word2ph, device=None):

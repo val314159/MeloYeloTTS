@@ -7,6 +7,11 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = None
 
 def get_bert_feature(text, word2ph, device=None):
+    print("BERT TEXT1", text)
+    text = text.replace(" {{{{tag}}}}", "")
+    text = text.replace( "{{{{tag}}}} ", "")
+    text = text.replace( "{{{{tag}}}}", "")
+    print("BERT TEXT2", text)
     global model
     if (
         sys.platform == "darwin"
