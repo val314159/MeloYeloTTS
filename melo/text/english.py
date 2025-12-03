@@ -254,6 +254,7 @@ def g2p(text, pad_start_end=True, tokenized=None, phoneme_list=PHONEME_LIST):
     phones = []
     tones = []
     word2ph = []
+    tag_count = 0
 
     print("PHG", ph_groups)
     for group in ph_groups:
@@ -261,6 +262,7 @@ def g2p(text, pad_start_end=True, tokenized=None, phoneme_list=PHONEME_LIST):
         print("W", w, w == '{{{{tag}}}}')
         if w == '{{{{tag}}}}':
             print("SKIP THIS ONE")
+            tag_count += 1
             continue
         phone_len = 0
         word_len = len(group)
@@ -268,7 +270,8 @@ def g2p(text, pad_start_end=True, tokenized=None, phoneme_list=PHONEME_LIST):
             phns, tns = refine_syllables(eng_dict[w.upper()])
             for n, (ph, tn) in enumerate(zip(phns, tns)):
                 word = w if n == 0 else None
-                phoneme_list.append(dict(phoneme=ph, tone=tn, word=word))
+                phoneme_list.append(dict(phoneme=ph, tone=tn, word=word, tag_count=tag_count))
+                tag_count = 0
             phones += phns
             tones += tns
             phone_len += len(phns)
@@ -282,7 +285,8 @@ def g2p(text, pad_start_end=True, tokenized=None, phoneme_list=PHONEME_LIST):
                 phones.append(ph)
                 tones.append(tn)
                 word = w if n == 0 else None
-                phoneme_list.append(dict(phoneme=ph, tone=tn, word=word))
+                phoneme_list.append(dict(phoneme=ph, tone=tn, word=word, tag_count=tag_count))
+                tag_count = 0
                 phone_len += 1
         aaa = distribute_phone(phone_len, word_len)
         word2ph += aaa

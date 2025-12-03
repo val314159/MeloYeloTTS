@@ -54,7 +54,7 @@ iter = tts.tts_iter(text, speaker_id)
 with sf.SoundFile(output_path, "w", samplerate=sr, channels=1) as fa:
     with open(timing_path, "w") as fj:
         for audio, word_dur in iter:
-            exit()
+            #exit()
             ms = audio.shape[0] / sr * 1000
             print(f"{ms:.2f} ms")
 
