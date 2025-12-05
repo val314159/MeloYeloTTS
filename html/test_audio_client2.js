@@ -15,50 +15,78 @@ const state = {
   connecting: false,
 };
 
-const els = {};
+const elts = {};
 const transcript = {
   words: [],
   utteranceStartTime: 0,
   awaitingFirstAudio: true,
   rafId: null,
   currentWord: null,
+  bufferedUntilMs: 0,
 };
+const pendingTimings = [];
+const TIMING_LOOKAHEAD_MS = 60;
+const chunkStartWatchers = new Set();
 
 function $(id) {
   return document.getElementById(id);
 }
 
+function reportNewChunk(startMs, durationMs) {
+  const safeStart = Number.isFinite(startMs) ? startMs : 0;
+  const safeDuration = Number.isFinite(durationMs) ? durationMs : 0;
+  console.log(
+    `[audio] queued chunk @ ${safeStart.toFixed(0)}ms for ${(safeDuration / 1000).toFixed(3)}s`
+  );
+}
+
+function onChunkStart(callback) {
+  if (typeof callback !== "function") return () => {};
+  chunkStartWatchers.add(callback);
+  return () => chunkStartWatchers.delete(callback);
+}
+
+function notifyChunkStart(startMs) {
+  chunkStartWatchers.forEach((cb) => {
+    try {
+      cb(startMs);
+    } catch (err) {
+      console.error("chunkStart watcher failed:", err);
+    }
+  });
+}
+
 function init() {
-  els.status = $("connection-status");
-  els.statusText = $("status-text");
-  els.prompt = $("tts-input");
-  els.log = $("log-lines");
-  els.timings = $("timings");
-  els.connectBtn = $("connect-btn");
-  els.sendBtn = $("send-btn");
+  elts.status = $("connection-status");
+  elts.statusText = $("status-text");
+  elts.prompt = $("tts-input");
+  elts.log = $("log-lines");
+  elts.timings = $("timings");
+  elts.connectBtn = $("connect-btn");
+  elts.sendBtn = $("send-btn");
 
-  els.transcriptStream = $("transcript-stream");
-  els.transcriptStatus = $("transcript-status");
-  els.transcriptProgress = $("transcript-progress");
-  els.clearTranscript = $("clear-transcript");
+  elts.transcriptStream = $("transcript-stream");
+  elts.transcriptStatus = $("transcript-status");
+  elts.transcriptProgress = $("transcript-progress");
+  elts.clearTranscript = $("clear-transcript");
 
-  els.connectBtn.addEventListener("click", connect);
-  els.sendBtn.addEventListener("click", sendPrompt);
-  els.clearTranscript.addEventListener("click", clearTranscript);
+  elts.connectBtn.addEventListener("click", connect);
+  elts.sendBtn.addEventListener("click", sendPrompt);
+  elts.clearTranscript.addEventListener("click", clearTranscript);
 
   connect();
 }
 
 function setStatus(text, stateAttr) {
-  els.statusText.textContent = text;
-  els.status.dataset.state = stateAttr;
+  elts.statusText.textContent = text;
+  elts.status.dataset.state = stateAttr;
 }
 
 function appendLog(text) {
   const line = document.createElement("div");
   line.className = "log-entry";
   line.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
-  els.log.prepend(line);
+  elts.log.prepend(line);
 }
 
 function appendTiming(wordDurList) {
@@ -70,9 +98,9 @@ function appendTiming(wordDurList) {
       return `${entry.word ?? "[pause]"} (${entry.start_ms?.toFixed?.(0) ?? "?"}–${displayEnd?.toFixed?.(0) ?? "?"} ms)`;
     })
     .join(", ");
-  els.timings.prepend(li);
-  while (els.timings.children.length > 40) {
-    els.timings.removeChild(els.timings.lastChild);
+  elts.timings.prepend(li);
+  while (elts.timings.children.length > 40) {
+    elts.timings.removeChild(elts.timings.lastChild);
   }
 
   const fragment = document.createDocumentFragment();
@@ -91,10 +119,37 @@ function appendTiming(wordDurList) {
     });
     fragment.appendChild(transcript.words.at(-1).element);
   });
-  els.transcriptStream.appendChild(fragment);
-  els.transcriptStream.scrollTop = els.transcriptStream.scrollHeight;
-  els.transcriptStatus.textContent = "Streaming…";
+  elts.transcriptStream.appendChild(fragment);
+  elts.transcriptStream.scrollTop = elts.transcriptStream.scrollHeight;
+  elts.transcriptStatus.textContent = "Streaming…";
   updateTranscriptProgress();
+}
+
+function enqueueTimings(wordDurList) {
+  if (!Array.isArray(wordDurList) || !wordDurList.length) return;
+  pendingTimings.push(...wordDurList);
+  flushPendingTimings(transcript.bufferedUntilMs);
+}
+
+function flushPendingTimings(upToMs) {
+  if (!upToMs || !pendingTimings.length) return;
+  const ready = [];
+  while (pendingTimings.length) {
+    const next = pendingTimings[0];
+    const startMs = next?.start_ms;
+    if (
+      startMs == null ||
+      Number.isNaN(startMs) ||
+      startMs <= upToMs + TIMING_LOOKAHEAD_MS
+    ) {
+      ready.push(pendingTimings.shift());
+    } else {
+      break;
+    }
+  }
+  if (ready.length) {
+    appendTiming(ready);
+  }
 }
 
 function ensureAudioContext() {
@@ -125,13 +180,23 @@ function schedulePcmChunk(arrayBuffer) {
   source.connect(state.audioCtx.destination);
 
   const startTime = Math.max(state.playbackCursor, state.audioCtx.currentTime);
+  let chunkStartMs;
   if (transcript.awaitingFirstAudio) {
     transcript.awaitingFirstAudio = false;
     transcript.utteranceStartTime = startTime;
+    chunkStartMs = 0;
     startTranscriptLoop();
+  } else {
+    chunkStartMs =
+      (startTime - transcript.utteranceStartTime) * 1000;
   }
   source.start(startTime);
+  reportNewChunk(chunkStartMs ?? 0, buffer.duration * 1000);
+  scheduleChunkStartNotification(startTime, chunkStartMs ?? 0);
   state.playbackCursor = startTime + buffer.duration;
+  const chunkEndMs = chunkStartMs + buffer.duration * 1000;
+  transcript.bufferedUntilMs = Math.max(transcript.bufferedUntilMs, chunkEndMs);
+  flushPendingTimings(transcript.bufferedUntilMs);
 }
 
 function connect() {
@@ -182,7 +247,7 @@ function handleMessage(data) {
     try {
       const timings = JSON.parse(data);
       if (Array.isArray(timings)) {
-        appendTiming(timings);
+        enqueueTimings(timings);
       } else {
         appendLog(`Received text frame: ${data}`);
       }
@@ -198,13 +263,32 @@ function handleMessage(data) {
     .catch((err) => appendLog(`AudioContext error: ${err.message}`));
 }
 
+function scheduleChunkStartNotification(startTime, chunkStartMs) {
+  if (!state.audioCtx) return;
+  const notify = () => {
+    const elapsed =
+      (state.audioCtx.currentTime - transcript.utteranceStartTime) * 1000;
+    notifyChunkStart(chunkStartMs);
+    console.log(`[audio] chunk began @ ${chunkStartMs.toFixed(0)}ms (elapsed=${elapsed.toFixed(0)}ms)`);
+  };
+  const tick = () => {
+    const now = state.audioCtx.currentTime;
+    if (now >= startTime) {
+      notify();
+    } else {
+      requestAnimationFrame(tick);
+    }
+  };
+  requestAnimationFrame(tick);
+}
+
 function sendPrompt() {
   if (!state.ws || state.ws.readyState !== WebSocket.OPEN) {
     appendLog("Cannot send: socket not open.");
     return;
   }
 
-  const text = els.prompt.value.trim();
+  const text = elts.prompt.value.trim();
   if (!text) {
     appendLog("Please enter text before sending.");
     return;
@@ -234,9 +318,11 @@ function resetTranscript() {
   transcript.awaitingFirstAudio = true;
   transcript.utteranceStartTime = 0;
   transcript.currentWord = null;
-  els.transcriptStream.textContent = "";
-  els.transcriptStatus.textContent = "Awaiting audio…";
-  els.transcriptProgress.textContent = "";
+  transcript.bufferedUntilMs = 0;
+  pendingTimings.length = 0;
+  elts.transcriptStream.textContent = "";
+  elts.transcriptStatus.textContent = "Awaiting audio…";
+  elts.transcriptProgress.textContent = "";
 }
 
 function clearTranscript() {
@@ -247,14 +333,14 @@ function clearTranscript() {
 function updateTranscriptProgress() {
   const spoken = transcript.words.filter((w) => w.spoken).length;
   const total = transcript.words.length;
-  els.transcriptProgress.textContent = total
+  elts.transcriptProgress.textContent = total
     ? `${spoken} / ${total} words`
     : "";
 }
 
 function startTranscriptLoop() {
   if (transcript.rafId || !state.audioCtx) return;
-  els.transcriptStatus.textContent = "Playing…";
+  elts.transcriptStatus.textContent = "Playing…";
   const tick = () => {
     highlightTranscript();
     transcript.rafId = requestAnimationFrame(tick);
@@ -299,7 +385,7 @@ function highlightTranscript() {
 
 function endTranscript() {
   stopTranscriptLoop();
-  els.transcriptStatus.textContent = "Completed";
+  elts.transcriptStatus.textContent = "Completed";
   highlightTranscript();
 }
 
