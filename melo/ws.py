@@ -6,7 +6,8 @@ from melo.api import TTS
 
 language = 'EN'
 speaker = 'EN-AU'
-device = 'cpu'
+#device = 'cpu'
+device = 'auto'
 tts = TTS(language='EN', device=device)
 speaker_id = tts.hps.data.spk2id[speaker]
 sr = tts.hps.data.sampling_rate

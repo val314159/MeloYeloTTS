@@ -1,6 +1,6 @@
 #!/bin/bash
 
-CUDA_VERSION=${1:-128}
+CUDA_VERSION=${1:-124}
 
 apt-get update
 apt-get install -y mecab libmecab-dev
