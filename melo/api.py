@@ -17,7 +17,7 @@ from .split_utils import split_sentence
 from .mel_processing import spectrogram_torch, spectrogram_torch_conv
 from .download_utils import load_or_download_config, load_or_download_model
 
-def extract_and_replace(text, pattern = re.compile(r"<<([^<>]+)>>|\[\[([^\[\]]+)\]\]")):
+def extract_and_replace(text, pattern = re.compile(r"(<<[^<>]+>>)|(\[\[[^\[\]]+\]\])")):
     tags = []
     def replacer(match):
         tag = next(g for g in match.groups() if g is not None)
@@ -220,7 +220,27 @@ class TTS(nn.Module):
                 audio = aud[0, 0].data.cpu().float().numpy().astype(np.float32)
                 audio2 = audio[:-end_of_utterance_slots]
                 audio3 = self.audio_numpy_concat([audio2], sr=sr, speed=speed, end_pause=0)
-                yield audio3, pl[1:-1]
+                #from pprint import pprint
+                #print("PL1")
+                #pprint(pl)               
+                def alter(x):
+                    tag_count = x.pop('tag_count')
+                    tag_list = []
+                    for t in range(tag_count):
+                        #print("ITS A COUNT")
+                        tag_list.append(tags.pop(0))
+                        pass
+                    if tag_list:
+                        x['tags'] = tag_list
+                        pass
+                    if not x['word']:
+                        x.pop('word')
+                        pass
+                    return x
+                pl2 = [alter(x) for x in pl if x]
+                #print("PL2")
+                #pprint(pl2)
+                yield audio3, pl2
 
                 del x_tst, tones, lang_ids, bert, ja_bert, x_tst_lengths, speakers
                 #

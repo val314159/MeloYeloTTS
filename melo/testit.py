@@ -59,9 +59,6 @@ with sf.SoundFile(output_path, "w", samplerate=sr, channels=1) as fa:
             print(f"{ms:.2f} ms")
 
             j = json.dumps(word_dur) + '\n'
-            json.dump(word_dur, fj)
-
-            #fj.seek(0, whence=2)  # move to end
             fj.write(j)
             fj.flush()
 

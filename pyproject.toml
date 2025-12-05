@@ -4,4 +4,8 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = [
+    "bottle>=0.13.4",
+    "gevent-websocket>=0.10.1",
+    "websocket-client>=1.9.0",
+]
