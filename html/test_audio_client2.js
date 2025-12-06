@@ -6,7 +6,11 @@
  */
 
 const SAMPLE_RATE = 44100;                      // Matches melo/ws.py `sr`.
-const WS_URL = `ws://${location.host}/audiows`;
+//const WS_URL = `ws://${location.host}/audiows`;
+const path = location.pathname;
+const prefix = path.startsWith('/tts/') ? '/tts' : '';
+const WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${prefix}/audiows`;
+console.log("WS_URL", WS_URL);
 
 const state = {
   ws: null,
