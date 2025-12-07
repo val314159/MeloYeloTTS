@@ -25,6 +25,7 @@ const transcript = {
   rafId: null,
   currentWord: null,
   streamEnded: false,
+  isRunning: false,
 };
 
 function $(id) {
@@ -247,6 +248,7 @@ function resetTranscript() {
   transcript.utteranceStartTime = 0;
   transcript.currentWord = null;
   transcript.streamEnded = false;
+  transcript.isRunning = false;
   els.transcriptStream.textContent = "";
   els.transcriptStatus.textContent = "Awaiting audio…";
   els.transcriptProgress.textContent = "";
@@ -267,22 +269,31 @@ function updateTranscriptProgress() {
     : "";
 }
 
+function transcriptionTick() {
+  if (!transcript.isRunning) return;
+  
+  highlightTranscript();
+  
+  // Only schedule next frame if transcript should continue running
+  if (transcript.isRunning) {
+    transcript.rafId = requestAnimationFrame(transcriptionTick);
+  }
+}
+
 function startTranscriptLoop() {
   console.log('startTranscriptLoop');
-  if (transcript.rafId || !state.audioCtx) return;
+  if (transcript.isRunning || !state.audioCtx) {
+    console.warn('Transcript loop already running or audio context not ready');
+    return;
+  }
+  transcript.isRunning = true;
   els.transcriptStatus.textContent = "Playing…";
-  const tick = () => {
-    highlightTranscript();
-    // Only schedule next frame if transcript is still active
-    if (transcript.rafId) {
-      transcript.rafId = requestAnimationFrame(tick);
-    }
-  };
-  transcript.rafId = requestAnimationFrame(tick);
+  transcriptionTick();
 }
 
 function stopTranscriptLoop() {
   console.log('stopTranscriptLoop');
+  transcript.isRunning = false;
   if (transcript.rafId) {
     cancelAnimationFrame(transcript.rafId);
     transcript.rafId = null;
@@ -292,9 +303,7 @@ function stopTranscriptLoop() {
 function highlightTranscript() {
   console.log('highlightTranscript');
   if (!state.audioCtx || transcript.awaitingFirstAudio) return;
-  
-  // Guard against infinite loop - stop if transcript already ended
-  if (!transcript.rafId) return;
+
   const elapsedMs =
     (state.audioCtx.currentTime - transcript.utteranceStartTime) * 1000;
   
