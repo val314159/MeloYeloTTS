@@ -22,6 +22,7 @@ const transcript = {
   awaitingFirstAudio: true,
   rafId: null,
   currentWord: null,
+  streamEnded: false,
 };
 
 function $(id) {
@@ -29,6 +30,7 @@ function $(id) {
 }
 
 function init() {
+  console.log('init');
   els.status = $("connection-status");
   els.statusText = $("status-text");
   els.prompt = $("tts-input");
@@ -50,11 +52,13 @@ function init() {
 }
 
 function setStatus(text, stateAttr) {
+  console.log('setStatus', text, stateAttr);
   els.statusText.textContent = text;
   els.status.dataset.state = stateAttr;
 }
 
 function appendLog(text) {
+  console.log('appendLog', text);
   const line = document.createElement("div");
   line.className = "log-entry";
   line.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
@@ -62,6 +66,7 @@ function appendLog(text) {
 }
 
 function appendTiming(wordDurList) {
+  console.log('appendTiming', wordDurList);
   const li = document.createElement("li");
   li.textContent = wordDurList
     .map((entry, idx) => {
@@ -98,6 +103,7 @@ function appendTiming(wordDurList) {
 }
 
 function ensureAudioContext() {
+  console.log('ensureAudioContext');
   if (!state.audioCtx) {
     state.audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
     state.playbackCursor = state.audioCtx.currentTime;
@@ -109,6 +115,7 @@ function ensureAudioContext() {
 }
 
 function schedulePcmChunk(arrayBuffer) {
+  console.log('schedulePcmChunk', arrayBuffer.byteLength);
   if (!state.audioCtx) return;
 
   const pcm16 = new Int16Array(arrayBuffer);
@@ -135,6 +142,7 @@ function schedulePcmChunk(arrayBuffer) {
 }
 
 function connect() {
+  console.log('connect');
   if (state.connecting) return;
   if (state.ws && state.ws.readyState === WebSocket.OPEN) {
     state.ws.close(1000, "Reconnecting");
@@ -170,12 +178,12 @@ function connect() {
 }
 
 function handleMessage(data) {
+  console.log('handleMessage', data);
   if (typeof data === "string") {
     if (!data) return;
     if (data === "EOF") {
       appendLog("Server signaled end of stream.");
-      state.playbackCursor = state.audioCtx?.currentTime ?? 0;
-      endTranscript();
+      transcript.streamEnded = true;
       return;
     }
 
@@ -222,6 +230,7 @@ function sendPrompt() {
 window.addEventListener("DOMContentLoaded", init);
 
 function createTranscriptWord(word) {
+  console.log('createTranscriptWord', word);
   const span = document.createElement("span");
   span.className = "transcript-word";
   span.textContent = word || "•";
@@ -229,22 +238,26 @@ function createTranscriptWord(word) {
 }
 
 function resetTranscript() {
+  console.log('resetTranscript');
   stopTranscriptLoop();
   transcript.words = [];
   transcript.awaitingFirstAudio = true;
   transcript.utteranceStartTime = 0;
   transcript.currentWord = null;
+  transcript.streamEnded = false;
   els.transcriptStream.textContent = "";
   els.transcriptStatus.textContent = "Awaiting audio…";
   els.transcriptProgress.textContent = "";
 }
 
 function clearTranscript() {
+  console.log('clearTranscript');
   resetTranscript();
   appendLog("Transcript cleared.");
 }
 
 function updateTranscriptProgress() {
+  console.log('updateTranscriptProgress');
   const spoken = transcript.words.filter((w) => w.spoken).length;
   const total = transcript.words.length;
   els.transcriptProgress.textContent = total
@@ -253,6 +266,7 @@ function updateTranscriptProgress() {
 }
 
 function startTranscriptLoop() {
+  console.log('startTranscriptLoop');
   if (transcript.rafId || !state.audioCtx) return;
   els.transcriptStatus.textContent = "Playing…";
   const tick = () => {
@@ -263,6 +277,7 @@ function startTranscriptLoop() {
 }
 
 function stopTranscriptLoop() {
+  console.log('stopTranscriptLoop');
   if (transcript.rafId) {
     cancelAnimationFrame(transcript.rafId);
     transcript.rafId = null;
@@ -270,9 +285,18 @@ function stopTranscriptLoop() {
 }
 
 function highlightTranscript() {
+  console.log('highlightTranscript');
   if (!state.audioCtx || transcript.awaitingFirstAudio) return;
   const elapsedMs =
     (state.audioCtx.currentTime - transcript.utteranceStartTime) * 1000;
+  
+  // Check if playback has completed
+  const playbackCompleted = state.audioCtx.currentTime >= state.playbackCursor && transcript.streamEnded;
+  if (playbackCompleted) {
+    endTranscript();
+    return;
+  }
+  
   transcript.words.forEach((word) => {
     const start = word.start_ms ?? Number.NEGATIVE_INFINITY;
     const end = word.end_ms ?? Number.POSITIVE_INFINITY;
@@ -298,12 +322,14 @@ function highlightTranscript() {
 }
 
 function endTranscript() {
+  console.log('endTranscript');
   stopTranscriptLoop();
   els.transcriptStatus.textContent = "Completed";
   highlightTranscript();
 }
 
 function inferEndMs(current, next) {
+  //console.log('inferEndMs', current, next);
   if (current?.end_ms != null && !Number.isNaN(current.end_ms)) {
     return current.end_ms;
   }

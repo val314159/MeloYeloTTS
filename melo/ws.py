@@ -124,6 +124,7 @@ def handle_index():
 </html>
 '''
 
+@app.route('/')
 @app.route('/<path>')
 def handle_static(path='index.html'):
     return static_file(path, 'html')
