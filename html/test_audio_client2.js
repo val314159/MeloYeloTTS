@@ -5,6 +5,8 @@
  * - Streams playback via Web Audio.
  */
 
+console.log('test_audio_client2.js loaded');
+
 const SAMPLE_RATE = 44100;                      // Matches melo/ws.py `sr`.
 const WS_URL = `ws://${location.host}/audiows`;
 
@@ -271,7 +273,10 @@ function startTranscriptLoop() {
   els.transcriptStatus.textContent = "Playing…";
   const tick = () => {
     highlightTranscript();
-    transcript.rafId = requestAnimationFrame(tick);
+    // Only schedule next frame if transcript is still active
+    if (transcript.rafId) {
+      transcript.rafId = requestAnimationFrame(tick);
+    }
   };
   transcript.rafId = requestAnimationFrame(tick);
 }
@@ -287,6 +292,9 @@ function stopTranscriptLoop() {
 function highlightTranscript() {
   console.log('highlightTranscript');
   if (!state.audioCtx || transcript.awaitingFirstAudio) return;
+  
+  // Guard against infinite loop - stop if transcript already ended
+  if (!transcript.rafId) return;
   const elapsedMs =
     (state.audioCtx.currentTime - transcript.utteranceStartTime) * 1000;
   
@@ -325,7 +333,6 @@ function endTranscript() {
   console.log('endTranscript');
   stopTranscriptLoop();
   els.transcriptStatus.textContent = "Completed";
-  highlightTranscript();
 }
 
 function inferEndMs(current, next) {
