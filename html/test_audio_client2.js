@@ -270,11 +270,7 @@ function updateTranscriptProgress() {
 }
 
 function transcriptionTick() {
-  if (!transcript.isRunning) return;
-  
   highlightTranscript();
-  
-  // Only schedule next frame if transcript should continue running
   if (transcript.isRunning) {
     transcript.rafId = requestAnimationFrame(transcriptionTick);
   }
