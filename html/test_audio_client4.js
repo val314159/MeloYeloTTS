@@ -5,14 +5,15 @@
  * - Streams playback via Web Audio.
  */
 
-console.log('test_audio_client4.js loaded');
+console.log('test_audio_client4.js loaded! 🎵');
 
 class TTSAudioManager {
-  constructor(sampleRate) {
-    this.sampleRate = sampleRate || 44100; // Matches melo/ws.py `sr`
+  constructor(sampleRate = 44100) {
+    this.sampleRate = sampleRate; // Matches melo/ws.py `sr`
     this.audioCtx = null;
     this.playbackEndTime = 0;
-    this.chunkStartTime = 0; // ms offset for the next chunk's timings within the utterance
+    this.utteranceStartAudioTime = null; // AudioContext.currentTime when this utterance's first chunk starts
+    this.pendingWordTimings = null; // holds the next timings batch until its PCM arrives
     this.words = [];
   }
 
@@ -48,9 +49,20 @@ class TTSAudioManager {
     source.start(startTime);
     this.playbackEndTime = startTime + buffer.duration;
 
-    // Advance chunkStartTime (utterance-relative ms) for the *next* timings batch.
-    const durationMs = buffer.duration * 1000;
-    this.chunkStartTime += durationMs;
+    // On the first chunk of an utterance, establish the audio-clock reference point.
+    if (this.utteranceStartAudioTime == null) {
+      this.utteranceStartAudioTime = startTime;
+    }
+
+    // Apply any pending timings batch for this chunk now that its audio is scheduled.
+    if (this.pendingWordTimings) {
+      const batch = this.pendingWordTimings;
+      this.pendingWordTimings = null;
+
+      // Compute this chunk's base in utterance-relative ms from the audio clock.
+      const baseMs = (startTime - this.utteranceStartAudioTime) * 1000;
+      this.applyWordTimings(batch, baseMs);
+    }
 
     return { startTime, duration: buffer.duration };
   }
@@ -69,12 +81,20 @@ class TTSAudioManager {
 
   resetWords() {
     this.words = [];
-    this.chunkStartTime = 0;
+    this.utteranceStartAudioTime = null;
+    this.pendingWordTimings = null;
   }
 
-  addWordTimings(wordDurList) {
+  addPendingWordTimings(wordDurList) {
+    if (this.pendingWordTimings === null) {
+      this.pendingWordTimings = wordDurList;
+    } else {
+      console.error('addPendingWordTimings called when pendingWordTimings is not null, ignoring new timings');
+    }
+  }
+
+  applyWordTimings(wordDurList, baseMs) {
     const newWords = [];
-    const baseMs = this.chunkStartTime;
     wordDurList.forEach((entry) => {
       const wordEntry = { ...entry };
       const localStart = entry.start_ms;
@@ -98,6 +118,7 @@ class TTSAudioManager {
       this.words.push(wordEntry);
       newWords.push(wordEntry);
     });
+    this.onApplyTiming?.(newWords);
     return newWords;
   }
 }
@@ -193,10 +214,11 @@ function applyTiming(processedWords) {
   updateTranscriptProgress();
 }
 
+ttsAudioManager.onApplyTiming = applyTiming;
+
 function appendTiming(wordDurList) {
   console.log('appendTiming', wordDurList);
-  const processedWords = ttsAudioManager.addWordTimings(wordDurList);
-  applyTiming(processedWords);
+  ttsAudioManager.addPendingWordTimings(wordDurList);
 }
 
 function ensureAudioContext() {
