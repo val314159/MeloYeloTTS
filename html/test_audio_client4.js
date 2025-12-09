@@ -11,7 +11,7 @@ class TTSAudioManager {
   constructor(sampleRate) {
     this.sampleRate = sampleRate || 44100; // Matches melo/ws.py `sr`
     this.audioCtx = null;
-    this.playbackCursor = 0;
+    this.playbackEndTime = 0;
     this.words = [];
   }
 
@@ -19,7 +19,7 @@ class TTSAudioManager {
     if (!this.audioCtx) {
       const AC = window.AudioContext || window.webkitAudioContext || AudioContext;
       this.audioCtx = new AC({ sampleRate: this.sampleRate });
-      this.playbackCursor = this.audioCtx.currentTime;
+      this.playbackEndTime = this.audioCtx.currentTime;
     }
     if (this.audioCtx.state === "suspended") {
       return this.audioCtx.resume();
@@ -43,9 +43,9 @@ class TTSAudioManager {
     source.buffer = buffer;
     source.connect(this.audioCtx.destination);
 
-    const startTime = Math.max(this.playbackCursor, this.audioCtx.currentTime);
+    const startTime = Math.max(this.playbackEndTime, this.audioCtx.currentTime);
     source.start(startTime);
-    this.playbackCursor = startTime + buffer.duration;
+    this.playbackEndTime = startTime + buffer.duration;
 
     return { startTime, duration: buffer.duration };
   }
@@ -58,8 +58,8 @@ class TTSAudioManager {
     return this.audioCtx ? this.audioCtx.currentTime : 0;
   }
 
-  getPlaybackCursor() {
-    return this.playbackCursor;
+  getPlaybackEndTime() {
+    return this.playbackEndTime;
   }
 
   resetWords() {
@@ -361,7 +361,7 @@ function highlightTranscript() {
   const elapsedMs = (currentTime - transcript.utteranceStartTime) * 1000;
   
   // Check if playback has completed
-  const playbackCompleted = currentTime >= ttsAudioManager.getPlaybackCursor() && transcript.streamEnded;
+  const playbackCompleted = currentTime >= ttsAudioManager.getPlaybackEndTime() && transcript.streamEnded;
   if (playbackCompleted) {
     endTranscript();
     return;
