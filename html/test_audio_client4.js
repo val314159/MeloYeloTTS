@@ -5,7 +5,7 @@
  * - Streams playback via Web Audio.
  */
 
-console.log('test_audio_client4.js loaded! 🎵');
+console.log('test_audio_client4.js loaded..! 🎵');
 
 class TTSAudioManager {
   constructor(sampleRate = 44100) {
@@ -15,6 +15,25 @@ class TTSAudioManager {
     this.utteranceStartAudioTime = null; // AudioContext.currentTime when this utterance's first chunk starts
     this.pendingWordTimings = null; // holds the next timings batch until its PCM arrives
     this.words = [];
+    this.loopRunning = false;
+    this.onFrame = null; // (currentTime, playbackEndTime) => void
+  }
+
+  startLoop() {
+    if (this.loopRunning || !this.audioCtx) return;
+    this.loopRunning = true;
+    const tick = () => {
+      if (!this.loopRunning) return;
+      const now = this.getCurrentTime();
+      const end = this.getPlaybackEndTime();
+      this.onFrame?.(now, end);
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+
+  stopLoop() {
+    this.loopRunning = false;
   }
 
   ensureContext() {
@@ -79,6 +98,14 @@ class TTSAudioManager {
     return this.playbackEndTime;
   }
 
+  getUtteranceStartTime() {
+    return this.utteranceStartAudioTime ?? 0;
+  }
+
+  isAwaitingFirstAudio() {
+    return this.utteranceStartAudioTime == null;
+  }
+
   resetWords() {
     this.words = [];
     this.utteranceStartAudioTime = null;
@@ -135,9 +162,6 @@ const state = {
 const els = {};
 const transcript = {
   words: [],
-  utteranceStartTime: 0,
-  awaitingFirstAudio: true,
-  rafId: null,
   currentWord: null,
   streamEnded: false,
   isRunning: false,
@@ -230,10 +254,7 @@ function schedulePcmChunk(arrayBuffer) {
   console.log('schedulePcmChunk', arrayBuffer.byteLength);
   const info = ttsAudioManager.schedulePcmChunk(arrayBuffer);
   if (!info) return;
-  const startTime = info.startTime;
-  if (transcript.awaitingFirstAudio) {
-    transcript.awaitingFirstAudio = false;
-    transcript.utteranceStartTime = startTime;
+  if (ttsAudioManager.isAwaitingFirstAudio()) {
     startTranscriptLoop();
   }
 }
@@ -343,8 +364,6 @@ function resetTranscript() {
   console.log('resetTranscript');
   stopTranscriptLoop();
   transcript.words = [];
-  transcript.awaitingFirstAudio = true;
-  transcript.utteranceStartTime = 0;
   transcript.currentWord = null;
   transcript.streamEnded = false;
   transcript.isRunning = false;
@@ -370,10 +389,9 @@ function updateTranscriptProgress() {
 }
 
 function transcriptionTick() {
+  if (!transcript.isRunning) return;
   highlightTranscript();
-  if (transcript.isRunning) {
-    transcript.rafId = requestAnimationFrame(transcriptionTick);
-  }
+  requestAnimationFrame(transcriptionTick);
 }
 
 function startTranscriptLoop() {
@@ -391,19 +409,16 @@ function startTranscriptLoop() {
 function stopTranscriptLoop() {
   console.log('stopTranscriptLoop');
   transcript.isRunning = false;
-  if (transcript.rafId) {
-    cancelAnimationFrame(transcript.rafId);
-    transcript.rafId = null;
-  }
 }
 
 function highlightTranscript() {
   console.log('highlightTranscript');
   const ctx = ttsAudioManager.getContext();
-  if (!ctx || transcript.awaitingFirstAudio) return;
+  if (!ctx || ttsAudioManager.isAwaitingFirstAudio()) return;
 
   const currentTime = ttsAudioManager.getCurrentTime();
-  const elapsedMs = (currentTime - transcript.utteranceStartTime) * 1000;
+  const utteranceStart = ttsAudioManager.getUtteranceStartTime();
+  const elapsedMs = (currentTime - utteranceStart) * 1000;
   
   // Check if playback has completed
   const playbackCompleted = currentTime >= ttsAudioManager.getPlaybackEndTime() && transcript.streamEnded;
@@ -435,6 +450,8 @@ function highlightTranscript() {
   });
   updateTranscriptProgress();
 }
+
+ttsAudioManager.onFrame = highlightTranscript;
 
 function endTranscript() {
   console.log('endTranscript');
