@@ -12,6 +12,7 @@ class TTSAudioManager {
     this.sampleRate = sampleRate || 44100; // Matches melo/ws.py `sr`
     this.audioCtx = null;
     this.playbackEndTime = 0;
+    this.chunkStartTime = 0; // ms offset for the next chunk's timings within the utterance
     this.words = [];
   }
 
@@ -47,6 +48,10 @@ class TTSAudioManager {
     source.start(startTime);
     this.playbackEndTime = startTime + buffer.duration;
 
+    // Advance chunkStartTime (utterance-relative ms) for the *next* timings batch.
+    const durationMs = buffer.duration * 1000;
+    this.chunkStartTime += durationMs;
+
     return { startTime, duration: buffer.duration };
   }
 
@@ -64,19 +69,32 @@ class TTSAudioManager {
 
   resetWords() {
     this.words = [];
+    this.chunkStartTime = 0;
   }
 
   addWordTimings(wordDurList) {
     const newWords = [];
+    const baseMs = this.chunkStartTime;
     wordDurList.forEach((entry) => {
       const wordEntry = { ...entry };
-      const startMs = wordEntry.start_ms ?? null;
-      if (startMs != null) {
+      const localStart = entry.start_ms;
+      const localEnd = entry.end_ms;
+
+      let globalStart = null;
+      if (localStart != null && !Number.isNaN(localStart)) {
+        globalStart = baseMs + localStart;
+        wordEntry.start_ms = globalStart;
+
         const prev = this.words.at(-1);
         if (prev && (prev.end_ms == null || Number.isNaN(prev.end_ms))) {
-          prev.end_ms = startMs;
+          prev.end_ms = globalStart;
         }
       }
+
+      if (localEnd != null && !Number.isNaN(localEnd)) {
+        wordEntry.end_ms = baseMs + localEnd;
+      }
+
       this.words.push(wordEntry);
       newWords.push(wordEntry);
     });
@@ -144,9 +162,8 @@ function appendLog(text) {
   els.log.prepend(line);
 }
 
-function appendTiming(wordDurList) {
-  console.log('appendTiming', wordDurList);
-  const processedWords = ttsAudioManager.addWordTimings(wordDurList);
+function applyTiming(processedWords) {
+  console.log('applyTiming', processedWords);
 
   const li = document.createElement("li");
   li.textContent = processedWords
@@ -174,6 +191,12 @@ function appendTiming(wordDurList) {
   els.transcriptStream.scrollTop = els.transcriptStream.scrollHeight;
   els.transcriptStatus.textContent = "Streaming…";
   updateTranscriptProgress();
+}
+
+function appendTiming(wordDurList) {
+  console.log('appendTiming', wordDurList);
+  const processedWords = ttsAudioManager.addWordTimings(wordDurList);
+  applyTiming(processedWords);
 }
 
 function ensureAudioContext() {
