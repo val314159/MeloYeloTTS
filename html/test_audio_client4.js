@@ -9,9 +9,10 @@ console.log('test_audio_client4.js loaded');
 
 class TTSAudioManager {
   constructor(sampleRate) {
-    this.sampleRate = sampleRate;
+    this.sampleRate = sampleRate || 44100; // Matches melo/ws.py `sr`
     this.audioCtx = null;
     this.playbackCursor = 0;
+    this.words = [];
   }
 
   ensureContext() {
@@ -60,12 +61,32 @@ class TTSAudioManager {
   getPlaybackCursor() {
     return this.playbackCursor;
   }
+
+  resetWords() {
+    this.words = [];
+  }
+
+  addWordTimings(wordDurList) {
+    const newWords = [];
+    wordDurList.forEach((entry) => {
+      const wordEntry = { ...entry };
+      const startMs = wordEntry.start_ms ?? null;
+      if (startMs != null) {
+        const prev = this.words.at(-1);
+        if (prev && (prev.end_ms == null || Number.isNaN(prev.end_ms))) {
+          prev.end_ms = startMs;
+        }
+      }
+      this.words.push(wordEntry);
+      newWords.push(wordEntry);
+    });
+    return newWords;
+  }
 }
 
-const SAMPLE_RATE = 44100;                      // Matches melo/ws.py `sr`.
 const WS_URL = `ws://${location.host}/audiows`;
 
-const ttsAudioManager = new TTSAudioManager(SAMPLE_RATE);
+const ttsAudioManager = new TTSAudioManager();
 
 const state = {
   ws: null,
@@ -125,11 +146,12 @@ function appendLog(text) {
 
 function appendTiming(wordDurList) {
   console.log('appendTiming', wordDurList);
+  const processedWords = ttsAudioManager.addWordTimings(wordDurList);
+
   const li = document.createElement("li");
-  li.textContent = wordDurList
-    .map((entry, idx) => {
-      const inferredEnd = inferEndMs(entry, wordDurList[idx + 1]);
-      const displayEnd = inferredEnd ?? entry.end_ms;
+  li.textContent = processedWords
+    .map((entry) => {
+      const displayEnd = entry.end_ms;
       return `${entry.word ?? "[pause]"} (${entry.start_ms?.toFixed?.(0) ?? "?"}–${displayEnd?.toFixed?.(0) ?? "?"} ms)`;
     })
     .join(", ");
@@ -139,20 +161,14 @@ function appendTiming(wordDurList) {
   }
 
   const fragment = document.createDocumentFragment();
-  wordDurList.forEach((entry) => {
-    const startMs = entry.start_ms ?? null;
-    if (startMs != null) {
-      const prev = transcript.words.at(-1);
-      if (prev && (prev.end_ms == null || Number.isNaN(prev.end_ms))) {
-        prev.end_ms = startMs;
-      }
-    }
-    transcript.words.push({
+  processedWords.forEach((entry) => {
+    const uiWord = {
       ...entry,
       element: createTranscriptWord(entry.word),
       spoken: false,
-    });
-    fragment.appendChild(transcript.words.at(-1).element);
+    };
+    transcript.words.push(uiWord);
+    fragment.appendChild(uiWord.element);
   });
   els.transcriptStream.appendChild(fragment);
   els.transcriptStream.scrollTop = els.transcriptStream.scrollHeight;
@@ -287,6 +303,7 @@ function resetTranscript() {
   transcript.currentWord = null;
   transcript.streamEnded = false;
   transcript.isRunning = false;
+  ttsAudioManager.resetWords();
   els.transcriptStream.textContent = "";
   els.transcriptStatus.textContent = "Awaiting audio…";
   els.transcriptProgress.textContent = "";
@@ -378,19 +395,4 @@ function endTranscript() {
   console.log('endTranscript');
   stopTranscriptLoop();
   els.transcriptStatus.textContent = "Completed";
-}
-
-function inferEndMs(current, next) {
-  //console.log('inferEndMs', current, next);
-  if (current?.end_ms != null && !Number.isNaN(current.end_ms)) {
-    return current.end_ms;
-  }
-  if (next?.start_ms != null && !Number.isNaN(next.start_ms)) {
-    return next.start_ms;
-  }
-  // Fallback: assume 150 ms duration if nothing else is known.
-  if (current?.start_ms != null) {
-    return current.start_ms + 150;
-  }
-  return null;
 }
