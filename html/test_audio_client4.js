@@ -5,7 +5,7 @@
  * - Streams playback via Web Audio.
  */
 
-console.log('test_audio_client2.js loaded');
+console.log('test_audio_client4.js loaded');
 
 const SAMPLE_RATE = 44100;                      // Matches melo/ws.py `sr`.
 const WS_URL = `ws://${location.host}/audiows`;
@@ -171,6 +171,11 @@ function connect() {
   };
 
   ws.onclose = (evt) => {
+    if (ws !== state.ws) return;
+    if (!transcript.streamEnded) {
+      console.log('Setting streamEnded to true in onclose');
+      transcript.streamEnded = true;
+    }
     state.ws = null;
     state.connecting = false;
     setStatus("Disconnected", "disconnected");
