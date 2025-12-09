@@ -39,10 +39,16 @@ def handle_audio():
 
     try:
 
+        print("NEW CLIENT CONNECTED")
+
         while True:
 
             text = wsock.receive()
             print("GOT TEXT", text)
+
+            if not text:
+                print("CLIENT DROPPED (that's ok)")
+                break
         
             iter = tts.tts_iter(text, speaker_id)
             print("GOT ITER", iter)
