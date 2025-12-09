@@ -1,12 +1,13 @@
 .PHONY: all clean realclean
 
 all: .venv
-	uv run testit.py hi there.
-#	uv run testit.py why hello. hello there ladies and germs.
-#	uv run testit.py
+	uv run melo/testit.py
+
+serve: .venv
+	uv run melo/ws.py
 
  .venv:
-	bash install.sh 130
+	bash install.sh
 
 clean:
 	find -name \*~ -o -name .\*~ | xargs rm -fr
