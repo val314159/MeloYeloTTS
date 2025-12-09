@@ -7,13 +7,68 @@
 
 console.log('test_audio_client4.js loaded');
 
+class TTSAudioManager {
+  constructor(sampleRate) {
+    this.sampleRate = sampleRate;
+    this.audioCtx = null;
+    this.playbackCursor = 0;
+  }
+
+  ensureContext() {
+    if (!this.audioCtx) {
+      const AC = window.AudioContext || window.webkitAudioContext || AudioContext;
+      this.audioCtx = new AC({ sampleRate: this.sampleRate });
+      this.playbackCursor = this.audioCtx.currentTime;
+    }
+    if (this.audioCtx.state === "suspended") {
+      return this.audioCtx.resume();
+    }
+    return Promise.resolve();
+  }
+
+  schedulePcmChunk(arrayBuffer) {
+    if (!this.audioCtx) return null;
+
+    const pcm16 = new Int16Array(arrayBuffer);
+    const float32 = new Float32Array(pcm16.length);
+    for (let i = 0; i < pcm16.length; i += 1) {
+      float32[i] = pcm16[i] / 32768;
+    }
+
+    const buffer = this.audioCtx.createBuffer(1, float32.length, this.sampleRate);
+    buffer.copyToChannel(float32, 0);
+
+    const source = this.audioCtx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(this.audioCtx.destination);
+
+    const startTime = Math.max(this.playbackCursor, this.audioCtx.currentTime);
+    source.start(startTime);
+    this.playbackCursor = startTime + buffer.duration;
+
+    return { startTime, duration: buffer.duration };
+  }
+
+  getContext() {
+    return this.audioCtx;
+  }
+
+  getCurrentTime() {
+    return this.audioCtx ? this.audioCtx.currentTime : 0;
+  }
+
+  getPlaybackCursor() {
+    return this.playbackCursor;
+  }
+}
+
 const SAMPLE_RATE = 44100;                      // Matches melo/ws.py `sr`.
 const WS_URL = `ws://${location.host}/audiows`;
 
+const ttsAudioManager = new TTSAudioManager(SAMPLE_RATE);
+
 const state = {
   ws: null,
-  audioCtx: null,
-  playbackCursor: 0,
   connecting: false,
 };
 
@@ -107,41 +162,19 @@ function appendTiming(wordDurList) {
 
 function ensureAudioContext() {
   console.log('ensureAudioContext');
-  if (!state.audioCtx) {
-    state.audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
-    state.playbackCursor = state.audioCtx.currentTime;
-  }
-  if (state.audioCtx.state === "suspended") {
-    return state.audioCtx.resume();
-  }
-  return Promise.resolve();
+  return ttsAudioManager.ensureContext();
 }
 
 function schedulePcmChunk(arrayBuffer) {
   console.log('schedulePcmChunk', arrayBuffer.byteLength);
-  if (!state.audioCtx) return;
-
-  const pcm16 = new Int16Array(arrayBuffer);
-  const float32 = new Float32Array(pcm16.length);
-  for (let i = 0; i < pcm16.length; i += 1) {
-    float32[i] = pcm16[i] / 32768;
-  }
-
-  const buffer = state.audioCtx.createBuffer(1, float32.length, SAMPLE_RATE);
-  buffer.copyToChannel(float32, 0);
-
-  const source = state.audioCtx.createBufferSource();
-  source.buffer = buffer;
-  source.connect(state.audioCtx.destination);
-
-  const startTime = Math.max(state.playbackCursor, state.audioCtx.currentTime);
+  const info = ttsAudioManager.schedulePcmChunk(arrayBuffer);
+  if (!info) return;
+  const startTime = info.startTime;
   if (transcript.awaitingFirstAudio) {
     transcript.awaitingFirstAudio = false;
     transcript.utteranceStartTime = startTime;
     startTranscriptLoop();
   }
-  source.start(startTime);
-  state.playbackCursor = startTime + buffer.duration;
 }
 
 function connect() {
@@ -283,7 +316,8 @@ function transcriptionTick() {
 
 function startTranscriptLoop() {
   console.log('startTranscriptLoop');
-  if (transcript.isRunning || !state.audioCtx) {
+  const ctx = ttsAudioManager.getContext();
+  if (transcript.isRunning || !ctx) {
     console.warn('Transcript loop already running or audio context not ready');
     return;
   }
@@ -303,13 +337,14 @@ function stopTranscriptLoop() {
 
 function highlightTranscript() {
   console.log('highlightTranscript');
-  if (!state.audioCtx || transcript.awaitingFirstAudio) return;
+  const ctx = ttsAudioManager.getContext();
+  if (!ctx || transcript.awaitingFirstAudio) return;
 
-  const elapsedMs =
-    (state.audioCtx.currentTime - transcript.utteranceStartTime) * 1000;
+  const currentTime = ttsAudioManager.getCurrentTime();
+  const elapsedMs = (currentTime - transcript.utteranceStartTime) * 1000;
   
   // Check if playback has completed
-  const playbackCompleted = state.audioCtx.currentTime >= state.playbackCursor && transcript.streamEnded;
+  const playbackCompleted = currentTime >= ttsAudioManager.getPlaybackCursor() && transcript.streamEnded;
   if (playbackCompleted) {
     endTranscript();
     return;
