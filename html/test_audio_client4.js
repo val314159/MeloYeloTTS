@@ -36,6 +36,10 @@ class TTSAudioManager {
     this.loopRunning = false;
   }
 
+  isLoopRunning() {
+    return this.loopRunning;
+  }
+
   ensureContext() {
     if (!this.audioCtx) {
       const AC = window.AudioContext || window.webkitAudioContext || AudioContext;
@@ -164,7 +168,6 @@ const transcript = {
   words: [],
   currentWord: null,
   streamEnded: false,
-  isRunning: false,
 };
 
 function $(id) {
@@ -252,9 +255,8 @@ function ensureAudioContext() {
 
 function schedulePcmChunk(arrayBuffer) {
   console.log('schedulePcmChunk', arrayBuffer.byteLength);
-  const info = ttsAudioManager.schedulePcmChunk(arrayBuffer);
-  if (!info) return;
-  if (ttsAudioManager.isAwaitingFirstAudio()) {
+  ttsAudioManager.schedulePcmChunk(arrayBuffer);
+  if (!ttsAudioManager.isAwaitingFirstAudio()) {
     startTranscriptLoop();
   }
 }
@@ -366,7 +368,6 @@ function resetTranscript() {
   transcript.words = [];
   transcript.currentWord = null;
   transcript.streamEnded = false;
-  transcript.isRunning = false;
   ttsAudioManager.resetWords();
   els.transcriptStream.textContent = "";
   els.transcriptStatus.textContent = "Awaiting audio…";
@@ -388,27 +389,20 @@ function updateTranscriptProgress() {
     : "";
 }
 
-function transcriptionTick() {
-  if (!transcript.isRunning) return;
-  highlightTranscript();
-  requestAnimationFrame(transcriptionTick);
-}
-
 function startTranscriptLoop() {
   console.log('startTranscriptLoop');
   const ctx = ttsAudioManager.getContext();
-  if (transcript.isRunning || !ctx) {
-    console.warn('Transcript loop already running or audio context not ready');
+  if (!ctx) {
+    console.warn('Transcript loop cannot start: audio context not ready');
     return;
   }
-  transcript.isRunning = true;
   els.transcriptStatus.textContent = "Playing…";
-  transcriptionTick();
+  ttsAudioManager.startLoop();
 }
 
 function stopTranscriptLoop() {
   console.log('stopTranscriptLoop');
-  transcript.isRunning = false;
+  ttsAudioManager.stopLoop();
 }
 
 function highlightTranscript() {
