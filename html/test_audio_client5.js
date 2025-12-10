@@ -96,8 +96,6 @@ function applyTiming(processedWords) {
   updateTranscriptProgress();
 }
 
-ttsAudioManager.onApplyTiming = applyTiming;
-
 function appendTiming(wordDurList) {
   console.log('appendTiming', wordDurList);
   ttsAudioManager.addPendingWordTimings(wordDurList);
@@ -122,26 +120,26 @@ function connect() {
   if (state.ws && state.ws.readyState === WebSocket.OPEN) {
     state.ws.close(1000, "Reconnecting");
   }
-
+  
   appendLog("Opening WebSocket…");
   setStatus("Connecting…", "connecting");
   state.connecting = true;
-
+  
   const ws = new WebSocket(WS_URL);
   ws.binaryType = "arraybuffer";
-
+  
   ws.onopen = () => {
     state.connecting = false;
     setStatus("Connected", "connected");
     appendLog("WebSocket connected.");
   };
-
+  
   ws.onmessage = (evt) => handleMessage(evt.data);
-
+  
   ws.onerror = (evt) => {
     appendLog(`WebSocket error: ${evt.message || evt.type}`);
   };
-
+  
   ws.onclose = (evt) => {
     if (ws !== state.ws) return;
     if (!transcript.streamEnded) {
@@ -153,7 +151,7 @@ function connect() {
     setStatus("Disconnected", "disconnected");
     appendLog(`Socket closed (${evt.code}).`);
   };
-
+  
   state.ws = ws;
 }
 
@@ -166,7 +164,7 @@ function handleMessage(data) {
       transcript.streamEnded = true;
       return;
     }
-
+    
     try {
       const timings = JSON.parse(data);
       if (Array.isArray(timings)) {
@@ -179,11 +177,11 @@ function handleMessage(data) {
     }
     return;
   }
-
+  
   // Binary frame (ArrayBuffer).
   ensureAudioContext()
-    .then(() => schedulePcmChunk(data))
-    .catch((err) => appendLog(`AudioContext error: ${err.message}`));
+  .then(() => schedulePcmChunk(data))
+  .catch((err) => appendLog(`AudioContext error: ${err.message}`));
 }
 
 function sendPrompt() {
@@ -191,23 +189,21 @@ function sendPrompt() {
     appendLog("Cannot send: socket not open.");
     return;
   }
-
+  
   const text = els.prompt.value.trim();
   if (!text) {
     appendLog("Please enter text before sending.");
     return;
   }
-
+  
   ensureAudioContext()
-    .then(() => {
-      appendLog(`Sending prompt (${text.length} chars)…`);
-      resetTranscript();
-      state.ws.send(text);
-    })
-    .catch((err) => appendLog(`AudioContext error: ${err.message}`));
+  .then(() => {
+    appendLog(`Sending prompt (${text.length} chars)…`);
+    resetTranscript();
+    state.ws.send(text);
+  })
+  .catch((err) => appendLog(`AudioContext error: ${err.message}`));
 }
-
-window.addEventListener("DOMContentLoaded", init);
 
 function createTranscriptWord(word) {
   console.log('createTranscriptWord', word);
@@ -240,10 +236,9 @@ function updateTranscriptProgress() {
   const spoken = transcript.words.filter((w) => w.spoken).length;
   const total = transcript.words.length;
   els.transcriptProgress.textContent = total
-    ? `${spoken} / ${total} words`
-    : "";
+  ? `${spoken} / ${total} words`
+  : "";
 }
-
 function startTranscript() {
   console.log('startTranscript');
   const ctx = ttsAudioManager.getContext();
@@ -262,10 +257,10 @@ function stopTranscriptLoop() {
 
 function highlightTranscript(wordIndex, word) {
   console.log('highlightTranscript', wordIndex, word);
-
+  
   const ctx = ttsAudioManager.getContext();
   if (!ctx || ttsAudioManager.isAwaitingFirstAudio()) return;
-
+  
   const currentTime = ttsAudioManager.getCurrentTime();
   const utteranceStart = ttsAudioManager.getUtteranceStartTime();
   const elapsedMs = (currentTime - utteranceStart) * 1000;
@@ -275,13 +270,13 @@ function highlightTranscript(wordIndex, word) {
     const end = word.end_ms ?? Number.POSITIVE_INFINITY;
     const el = word.element;
     if (!el) return;
-
+    
     const isActive = elapsedMs >= start && elapsedMs < end;
     const isSpoken = elapsedMs >= end;
     el.classList.toggle("active", isActive);
     el.classList.toggle("spoken", isSpoken);
     word.spoken = isSpoken;
-
+    
     if (isActive && transcript.currentWord !== word.element) {
       transcript.currentWord = word.element;
       console.log(
@@ -291,7 +286,7 @@ function highlightTranscript(wordIndex, word) {
       );
     }
   };
-
+  
   // transcript.words.forEach(processTranscriptWords);
   if (wordIndex > 0) {
     processTranscriptWords(transcript.words[wordIndex - 1]);
@@ -311,10 +306,12 @@ function endTranscript(end_ms) {
     // Optionally reuse highlighting logic once at the very end:
     highlightTranscript(lastIndex, lastWord);
   }
-  stopTranscriptLoop();
   els.transcriptStatus.textContent = "Completed";
 }
 
 ttsAudioManager.onStartUtterance = startTranscript;
 ttsAudioManager.onStartPhoneme = highlightTranscript;
 ttsAudioManager.onEndUtterance = endTranscript;
+ttsAudioManager.onApplyTiming = applyTiming;
+
+window.addEventListener("DOMContentLoaded", init);
