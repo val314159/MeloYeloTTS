@@ -437,8 +437,9 @@ function stopTranscriptLoop() {
   ttsAudioManager.stopLoop();
 }
 
-function highlightTranscript() {
-  console.log('highlightTranscript');
+function highlightTranscript(wordIndex, word) {
+  console.log('highlightTranscript', wordIndex, word);
+
   const ctx = ttsAudioManager.getContext();
   if (!ctx || ttsAudioManager.isAwaitingFirstAudio()) return;
 
@@ -446,7 +447,7 @@ function highlightTranscript() {
   const utteranceStart = ttsAudioManager.getUtteranceStartTime();
   const elapsedMs = (currentTime - utteranceStart) * 1000;
   
-  transcript.words.forEach((word) => {
+  const processTranscriptWords = (word) => {
     const start = word.start_ms ?? Number.NEGATIVE_INFINITY;
     const end = word.end_ms ?? Number.POSITIVE_INFINITY;
     const el = word.element;
@@ -466,7 +467,13 @@ function highlightTranscript() {
         ) ?? start}ms`
       );
     }
-  });
+  };
+
+  // transcript.words.forEach(processTranscriptWords);
+  if (wordIndex > 0) {
+    processTranscriptWords(transcript.words[wordIndex - 1]);
+  }
+  processTranscriptWords(transcript.words[wordIndex]);
   updateTranscriptProgress();
 }
 
