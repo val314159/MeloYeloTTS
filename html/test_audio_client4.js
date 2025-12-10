@@ -15,20 +15,53 @@ class TTSAudioManager {
     this.utteranceStartAudioTime = null; // AudioContext.currentTime when this utterance's first chunk starts
     this.pendingWordTimings = null; // holds the next timings batch until its PCM arrives
     this.words = [];
+    this.wordIndex = -1;
     this.loopRunning = false;
-    this.onFrame = null; // (currentTime, playbackEndTime) => void
+    this.onFrame = null;
+    this.onEndUtterance = null;
   }
 
   startLoop() {
-    if (this.loopRunning || !this.audioCtx) return;
-    this.loopRunning = true;
     const tick = () => {
       if (!this.loopRunning) return;
-      const now = this.getCurrentTime();
-      const end = this.getPlaybackEndTime();
-      this.onFrame?.(now, end);
+      const nowMs = (this.getCurrentTime() - this.utteranceStartAudioTime) * 1000;
+      console.log('tick', nowMs);
+      if (this.wordIndex < 0) {
+        this.wordIndex = 0;
+        if (this.wordIndex >= this.words.length) {
+          this.wordIndex = -2;
+          console.warn("utterance OVER!")
+          return this.onEndUtterance?.();
+        }
+        console.warn("moved to word 000", this.words[this.wordIndex]);
+        this.onFrame?.(this.wordIndex, this.words[this.wordIndex]);
+      } else {
+        const currentWord = this.words[this.wordIndex];
+        if (currentWord.end_ms !== undefined) {
+          const endMs = currentWord.end_ms;
+          if (nowMs >= endMs) {
+            this.wordIndex++;
+            if (this.wordIndex >= this.words.length) {
+              this.wordIndex = -2;
+              console.warn("utterance OVER!")
+              return this.onEndUtterance?.();
+            }
+            console.warn("moved to word", this.wordIndex, this.words[this.wordIndex]);
+            this.onFrame?.(this.wordIndex, this.words[this.wordIndex]);
+          }
+        } else {
+          const endMs = (this.getPlaybackEndTime() - this.utteranceStartAudioTime) * 1000;
+          if (nowMs >= endMs) {
+            this.wordIndex = -2;
+            console.warn("utterance OVER!")
+            return this.onEndUtterance?.();
+          }
+        }
+      }
       requestAnimationFrame(tick);
     };
+    if (this.loopRunning || !this.audioCtx) return;
+    this.loopRunning = true;
     requestAnimationFrame(tick);
   }
 
@@ -86,8 +119,6 @@ class TTSAudioManager {
       const baseMs = (startTime - this.utteranceStartAudioTime) * 1000;
       this.applyWordTimings(batch, baseMs);
     }
-
-    return { startTime, duration: buffer.duration };
   }
 
   getContext() {
@@ -112,6 +143,7 @@ class TTSAudioManager {
 
   resetWords() {
     this.words = [];
+    this.wordIndex = -1;
     this.utteranceStartAudioTime = null;
     this.pendingWordTimings = null;
   }
@@ -414,13 +446,6 @@ function highlightTranscript() {
   const utteranceStart = ttsAudioManager.getUtteranceStartTime();
   const elapsedMs = (currentTime - utteranceStart) * 1000;
   
-  // Check if playback has completed
-  const playbackCompleted = currentTime >= ttsAudioManager.getPlaybackEndTime() && transcript.streamEnded;
-  if (playbackCompleted) {
-    endTranscript();
-    return;
-  }
-  
   transcript.words.forEach((word) => {
     const start = word.start_ms ?? Number.NEGATIVE_INFINITY;
     const end = word.end_ms ?? Number.POSITIVE_INFINITY;
@@ -448,7 +473,8 @@ function highlightTranscript() {
 ttsAudioManager.onFrame = highlightTranscript;
 
 function endTranscript() {
-  console.log('endTranscript');
   stopTranscriptLoop();
   els.transcriptStatus.textContent = "Completed";
 }
+
+ttsAudioManager.onEndUtterance = endTranscript;
