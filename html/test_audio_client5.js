@@ -109,9 +109,6 @@ function ensureAudioContext() {
 function schedulePcmChunk(arrayBuffer) {
   console.log('schedulePcmChunk', arrayBuffer.byteLength);
   ttsAudioManager.schedulePcmChunk(arrayBuffer);
-  if (!ttsAudioManager.isAwaitingFirstAudio()) {
-    startTranscriptLoop();
-  }
 }
 
 function connect() {
@@ -215,11 +212,11 @@ function createTranscriptWord(word) {
 
 function resetTranscript() {
   console.log('resetTranscript');
-  stopTranscriptLoop();
+  ttsAudioManager.stopLoop();
+  ttsAudioManager.resetWords();
   transcript.words = [];
   transcript.currentWord = null;
   transcript.streamEnded = false;
-  ttsAudioManager.resetWords();
   els.transcriptStream.textContent = "";
   els.transcriptStatus.textContent = "Awaiting audio…";
   els.transcriptProgress.textContent = "";
@@ -239,6 +236,7 @@ function updateTranscriptProgress() {
   ? `${spoken} / ${total} words`
   : "";
 }
+
 function startTranscript() {
   console.log('startTranscript');
   const ctx = ttsAudioManager.getContext();
@@ -248,11 +246,6 @@ function startTranscript() {
   }
   els.transcriptStatus.textContent = "Playing…";
   return true;
-}
-
-function stopTranscriptLoop() {
-  console.log('stopTranscriptLoop');
-  ttsAudioManager.stopLoop();
 }
 
 function highlightTranscript(wordIndex, word) {
@@ -309,9 +302,9 @@ function endTranscript(end_ms) {
   els.transcriptStatus.textContent = "Completed";
 }
 
+ttsAudioManager.onApplyTiming = applyTiming;
 ttsAudioManager.onStartUtterance = startTranscript;
 ttsAudioManager.onStartPhoneme = highlightTranscript;
 ttsAudioManager.onEndUtterance = endTranscript;
-ttsAudioManager.onApplyTiming = applyTiming;
 
 window.addEventListener("DOMContentLoaded", init);
