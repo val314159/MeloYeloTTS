@@ -215,12 +215,7 @@ class TTS(nn.Module):
                     start = start_frames[slot_j].item()
                     # info is either None (sentinels) or {'phoneme': ..., 'tone': ..., 'word': ...}
                     if info:
-                        #info['frame_rate'] = frame_us
-
-                        #info['dur_frame'] = duration
-                        #info['start_frame'] = start
-                        #info['end_frame'] = start + duration
-                        
+                        # OLD FOR COMPATIBILITY: keeping old field names for backward compatibility
                         info['duration_ms'] = round(duration * frame_ms)
                         info['start_ms'] = round(start * frame_ms)
                         info['end_ms'] = round((start + duration) * frame_ms)
