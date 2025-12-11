@@ -7,6 +7,8 @@
 ## Introduction
 MeloTTS is a **high-quality multi-lingual** text-to-speech library by [MIT](https://www.mit.edu/) and [MyShell.ai](https://myshell.ai). Supported languages include:
 
+This fork adds **streaming WebSocket TTS**, an **iterator-style API with phoneme-aligned timing**, and **expression/animation tags** for real-time, avatar-friendly applications.
+
 | Language | Example |
 | --- | --- |
 | English (American)    | [Link](https://myshell-public-repo-host.s3.amazonaws.com/myshellttsbase/examples/en/EN-US/speed_1.0/sent_000.wav) |
@@ -23,6 +25,30 @@ MeloTTS is a **high-quality multi-lingual** text-to-speech library by [MIT](http
 Some other features include:
 - The Chinese speaker supports `mixed Chinese and English`.
 - Fast enough for `CPU real-time inference`.
+
+## What's new in this fork
+
+This fork adds features aimed at **real-time apps, avatars, and tools**, on top of upstream MeloTTS:
+
+- **Streaming TTS over WebSockets**
+  - Lightweight WebSocket server that streams audio chunks to browser or remote clients.
+  - HTML/JS demo clients in `html/` show how to send text and play audio as it streams (no need to wait for the full utterance).
+
+- **Iterator-style TTS API**
+  - New `TTS.tts_iter(...)` method in `melo/api.py`:
+    - Yields `(audio_segment, phoneme_metadata)` per sentence/segment.
+    - Lets you consume audio progressively for streaming and interactive pipelines.
+
+- **Phoneme-level timing for alignment**
+  - Each phoneme now includes approximate time information, derived from the model's internal frame durations:
+    - `start_ms`, `duration_ms`, `end_ms` – integer milliseconds (backwards-compatible).
+    - `start_us`, `duration_us`, `end_us` – integer microseconds for higher-resolution alignment.
+  - Useful for lip-sync, animation, and karaoke-style highlighting.
+
+- **Expression and animation tags in text**
+  - Text can include special inline tags for expressions, animation cues, or other events.
+  - The G2P pipeline tracks where these tags occur and attaches them to phoneme metadata.
+  - The iterator output can include a `tags` field on phonemes so you can trigger expressions or other in-engine events in sync with the speech.
 
 ## Usage
 - [Use without Installation](docs/quick_use.md)
@@ -42,6 +68,7 @@ If you find this work useful, please consider contributing to this repo.
 - [Wenliang Zhao](https://wl-zhao.github.io) at Tsinghua University
 - [Xumin Yu](https://yuxumin.github.io) at Tsinghua University
 - [Zengyi Qin](https://www.qinzy.tech) (project lead) at MIT and MyShell
+- Joel "val" Ward (val@ai.ccl.io) at CircleClickLabs
 
 **Citation**
 ```

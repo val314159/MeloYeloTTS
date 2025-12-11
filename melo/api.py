@@ -169,6 +169,7 @@ class TTS(nn.Module):
         hop = self.hps.data.hop_length
         sr = self.hps.data.sampling_rate
         frame_ms = hop * 1000.0 / sr
+        frame_us = round(hop * 1000000.0 / sr)
         for t in tx:
             if language in ['EN', 'ZH_MIX_EN']:
                 t = re.sub(r'([a-z])([A-Z])', r'\1 \2', t)
@@ -210,10 +211,18 @@ class TTS(nn.Module):
                     slot_j = 2 * i + 1
                     if slot_j >= dur.numel():
                         break  # past the extra final blank
-                    start_ms = (start_frames[slot_j] * frame_ms).item()
+                    duration = dur[slot_j].item()
+                    start = start_frames[slot_j].item()
                     # info is either None (sentinels) or {'phoneme': ..., 'tone': ..., 'word': ...}
                     if info:
-                        info['start_ms'] = round(start_ms)
+                        # OLD FOR COMPATIBILITY: keeping old field names for backward compatibility
+                        info['duration_ms'] = round(duration * frame_ms)
+                        info['start_ms'] = round(start * frame_ms)
+                        info['end_ms'] = round((start + duration) * frame_ms)
+
+                        info['duration_us'] = duration * frame_us
+                        info['start_us'] = start * frame_us
+                        info['end_us'] = (start + duration) * frame_us
                         pass
                     pass
                 end_of_utterance_slots = (dur[-1] * hop).item()
@@ -248,3 +257,5 @@ class TTS(nn.Module):
             pass
 
         torch.cuda.empty_cache()
+
+
