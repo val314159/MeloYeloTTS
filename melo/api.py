@@ -17,7 +17,7 @@ from .split_utils import split_sentence
 from .mel_processing import spectrogram_torch, spectrogram_torch_conv
 from .download_utils import load_or_download_config, load_or_download_model
 
-def extract_and_replace(text, pattern = re.compile(r"(<<[^<>]+>>)|(\[\[[^\[\]]+\]\])")):
+def extract_and_replace(text, pattern = re.compile(r"(<\(<[^<>]+>\)>)|(\[\(\[[^\[\]]+\]\)\])")):
     tags = []
     def replacer(match):
         tag = next(g for g in match.groups() if g is not None)
