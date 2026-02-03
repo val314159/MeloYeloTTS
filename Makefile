@@ -16,3 +16,7 @@ realclean:
 	rm -fr .venv uv.lock meloyelotts.egg-info *.wav
 	find -name \*~ -o -name __pycache__ | xargs rm -fr
 	tree -I .git -a .
+
+ollama:
+	apt-get install -y lshw 
+	curl -fsSL https://ollama.com/install.sh | sh
